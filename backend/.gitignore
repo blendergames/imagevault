@@ -46,3 +46,5 @@ logs/
 .DS_Store
 Thumbs.db
 
+# App data (local state, configs, uploads)
+app_data/

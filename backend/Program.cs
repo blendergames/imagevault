@@ -4,6 +4,9 @@ using ImageVault.Api.Models;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Processing;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -61,8 +64,10 @@ app.UseAuthorization();
 
 var appDataDir = Path.Combine(app.Environment.ContentRootPath, "app_data");
 var configPath = Path.Combine(appDataDir, "config.json");
+var imagesDir = Path.Combine(appDataDir, "images");
 
 Directory.CreateDirectory(appDataDir);
+Directory.CreateDirectory(imagesDir);
 
 static bool IsConfigComplete(AppConfig? c)
 {
@@ -195,4 +200,153 @@ if (builder.Environment.IsDevelopment() || !googleConfigured)
     });
 }
 
+// Upload image (auth required)
+app.MapPost("/api/images", async (HttpContext http) =>
+{
+    if (http.User?.Identity?.IsAuthenticated != true)
+        return Results.Unauthorized();
+
+    var form = await http.Request.ReadFormAsync();
+    var file = form.Files["file"];
+    var description = form["description"].ToString() ?? string.Empty;
+    if (file is null || file.Length == 0)
+        return Results.BadRequest(new { error = "file missing" });
+
+    var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
+    var ext = Path.GetExtension(file.FileName);
+    if (string.IsNullOrWhiteSpace(ext) || !allowed.Contains(ext))
+        return Results.BadRequest(new { error = "unsupported file type" });
+
+    var id = Guid.NewGuid().ToString("N");
+    var idDir = Path.Combine(imagesDir, id);
+    Directory.CreateDirectory(idDir);
+
+    var originalPath = Path.Combine(idDir, "original" + ext.ToLowerInvariant());
+    await using (var fs = File.Create(originalPath))
+    {
+        await file.CopyToAsync(fs);
+    }
+
+    var thumbPath = Path.Combine(idDir, "thumb.jpg");
+    using (var image = await Image.LoadAsync(originalPath))
+    {
+        image.Mutate(x => x.Resize(new ResizeOptions
+        {
+            Mode = ResizeMode.Max,
+            Size = new Size(128, 128)
+        }));
+        await image.SaveAsJpegAsync(thumbPath, new JpegEncoder { Quality = 85 });
+    }
+
+    var item = new ImageItem
+    {
+        Id = id,
+        Description = description ?? string.Empty,
+        OriginalPath = originalPath,
+        ThumbPath = thumbPath,
+        OriginalContentType = file.ContentType ?? "application/octet-stream",
+        UploadedAt = DateTime.UtcNow
+    };
+    ImageIndex.Add(imagesDir, item);
+
+    return Results.Ok(new { id, thumbUrl = $"/api/images/{id}/thumb" });
+});
+
+// Search images (public)
+app.MapGet("/api/images/search", (HttpRequest req) =>
+{
+    var q = req.Query["q"].ToString() ?? string.Empty;
+    var items = ImageIndex.Load(imagesDir);
+    IEnumerable<ImageItem> query = items;
+    if (!string.IsNullOrWhiteSpace(q))
+    {
+        query = items.Where(i => (i.Description ?? string.Empty).Contains(q, StringComparison.OrdinalIgnoreCase));
+    }
+    var results = query
+        .OrderByDescending(i => i.UploadedAt)
+        .Take(10)
+        .Select(i => new { id = i.Id, description = i.Description, thumbUrl = $"/api/images/{i.Id}/thumb" });
+    return Results.Ok(results);
+});
+
+// Serve thumbnail (public)
+app.MapGet("/api/images/{id}/thumb", (string id) =>
+{
+    var item = ImageIndex.Get(imagesDir, id);
+    if (item is null || !File.Exists(item.ThumbPath)) return Results.NotFound();
+    return Results.File(item.ThumbPath, "image/jpeg");
+});
+
+// Serve original (public)
+app.MapGet("/api/images/{id}/original", (string id) =>
+{
+    var item = ImageIndex.Get(imagesDir, id);
+    if (item is null || !File.Exists(item.OriginalPath)) return Results.NotFound();
+    var contentType = string.IsNullOrWhiteSpace(item.OriginalContentType) ? "application/octet-stream" : item.OriginalContentType;
+    return Results.File(item.OriginalPath, contentType);
+});
+
 app.Run();
+
+// Image models and helpers
+namespace ImageVault.Api.Models
+{
+    public class ImageItem
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string OriginalPath { get; set; } = string.Empty;
+        public string ThumbPath { get; set; } = string.Empty;
+        public string OriginalContentType { get; set; } = "";
+        public DateTime UploadedAt { get; set; }
+    }
+}
+
+static class ImageIndex
+{
+    private const string IndexFileName = "index.json";
+    private static readonly object Gate = new();
+
+    public static List<ImageVault.Api.Models.ImageItem> Load(string imagesDir)
+    {
+        lock (Gate)
+        {
+            var path = Path.Combine(imagesDir, IndexFileName);
+            if (!File.Exists(path)) return new();
+            try
+            {
+                var json = File.ReadAllText(path);
+                var list = JsonSerializer.Deserialize<List<ImageVault.Api.Models.ImageItem>>(json) ?? new();
+                return list;
+            }
+            catch
+            {
+                return new();
+            }
+        }
+    }
+
+    public static void Save(string imagesDir, List<ImageVault.Api.Models.ImageItem> items)
+    {
+        lock (Gate)
+        {
+            var path = Path.Combine(imagesDir, IndexFileName);
+            var json = JsonSerializer.Serialize(items, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(path, json);
+        }
+    }
+
+    public static void Add(string imagesDir, ImageVault.Api.Models.ImageItem item)
+    {
+        var list = Load(imagesDir);
+        list.RemoveAll(x => x.Id == item.Id);
+        list.Add(item);
+        Save(imagesDir, list);
+    }
+
+    public static ImageVault.Api.Models.ImageItem? Get(string imagesDir, string id)
+    {
+        var list = Load(imagesDir);
+        return list.FirstOrDefault(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+    }
+}

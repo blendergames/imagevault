@@ -39,3 +39,23 @@ export async function devLogout() {
   if (!res.ok) throw new Error('dev-logout failed')
   return res.json()
 }
+
+export async function uploadImage(file, description = '') {
+  const fd = new FormData()
+  fd.append('file', file)
+  fd.append('description', description || '')
+  const res = await fetch('/api/images', {
+    method: 'POST',
+    body: fd,
+    credentials: 'include'
+  })
+  if (!res.ok) throw new Error('upload failed')
+  return res.json()
+}
+
+export async function searchImages(q) {
+  const url = q ? `/api/images/search?q=${encodeURIComponent(q)}` : '/api/images/search'
+  const res = await fetch(url, { credentials: 'include' })
+  if (!res.ok) throw new Error('search failed')
+  return res.json()
+}
