@@ -50,3 +50,6 @@ Thumbs.db
 app_data/
 # Explicitly ignore config.json (even if app_data is later un-ignored)
 app_data/config.json
+
+# Application settings
+appsettings.json
