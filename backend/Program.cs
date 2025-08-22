@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.Google;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Processing;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,6 +51,16 @@ if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
 }
+
+// Honor reverse proxy headers for correct scheme/host in redirects (e.g., OAuth)
+var fwdOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost
+};
+// Accept all proxies by default (set explicit proxies in production if desired)
+fwdOptions.KnownNetworks.Clear();
+fwdOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(fwdOptions);
 
 // Listen on 5080 on all interfaces by default (LAN access)
 var urls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
