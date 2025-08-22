@@ -1,0 +1,48 @@
+# .NET 8 / .NET (SDK-style)
+bin/
+obj/
+out/
+artifacts/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio Code (workspace-local settings)
+.vscode/
+
+# JetBrains Rider / IntelliJ
+.idea/
+*.DotSettings.user
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+*.nuspec
+*.nuget.props
+*.nuget.targets
+
+# Testing and Coverage
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+BenchmarkDotNet.Artifacts/
+
+# NCrunch
+_NCrunch_*
+.*crunch*.local.xml
+nCrunchTemp_*
+
+# Logs and diagnostics
+*.log
+logs/
+
+# OS / Editor junk
+.DS_Store
+Thumbs.db
+
