@@ -28,3 +28,14 @@ export async function logout() {
   return res.json()
 }
 
+export async function devLogin() {
+  const res = await fetch('/api/auth/dev-login', { method: 'GET', credentials: 'include' })
+  if (!res.ok) throw new Error('dev-login failed')
+  return res.json()
+}
+
+export async function devLogout() {
+  const res = await fetch('/api/auth/dev-logout', { method: 'POST', credentials: 'include' })
+  if (!res.ok) throw new Error('dev-logout failed')
+  return res.json()
+}

@@ -1,9 +1,9 @@
 <template>
   <div class="app dark">
-    <NavBar :user="user" @logout="handleLogout" />
+    <NavBar :user="user" :configReady="configReady" @logout="handleLogout" @dev-logout="handleDevLogout" />
     <main class="container">
       <SetupView v-if="!configReady" @saved="refreshAll" />
-      <LoginView v-else-if="!user" />
+      <LoginView v-else-if="!user" @logged-in="refreshAll" />
       <HomeView v-else :user="user" />
     </main>
   </div>
@@ -12,7 +12,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getConfigStatus, getMe, logout } from './api'
+import { getConfigStatus, getMe, logout, devLogout } from './api'
 import NavBar from './components/NavBar.vue'
 import LoginView from './views/LoginView.vue'
 import SetupView from './views/SetupView.vue'
@@ -34,6 +34,14 @@ async function refreshAll() {
 async function handleLogout() {
   await logout()
   await refreshAll()
+}
+
+async function handleDevLogout() {
+  try {
+    await devLogout()
+  } finally {
+    await refreshAll()
+  }
 }
 
 onMounted(refreshAll)
@@ -60,4 +68,3 @@ onMounted(refreshAll)
 .space { height: 16px; }
 .footer { text-align: center; color: var(--muted); padding: 16px 0 40px; }
 </style>
-
