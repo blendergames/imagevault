@@ -48,3 +48,5 @@ Thumbs.db
 
 # App data (local state, configs, uploads)
 app_data/
+# Explicitly ignore config.json (even if app_data is later un-ignored)
+app_data/config.json
